@@ -6,8 +6,9 @@ import sys
 import getopt
 import _thread
 
+
 # TODO: read config from yaml file for channels and address
-class controller:
+class Controller:
     def __init__(self):
         self.client = opc.Client('munin.local:7890')
         self.channels = {
@@ -20,31 +21,57 @@ class controller:
             7: (384, 448),
             8: (448, 512)
         }
+        self.leds = {}
+        self.programs = [
+            'storm',
+            'rainbow_storm',
+            'cylon',
+            'rainbow_cylon',
+            'rainbow_chase',
+            'rainbow_chase_rev',
+            'sunrise'
+        ]
+        self.program_index = 0
+        self.state = False
 
         self.numleds = 0
-        for channel in self.channels:
-            self.numleds += self.channels[channel][1]
+        for channel_index in self.channels:
+            self.numleds += self.channels[channel_index][1]
+            self.leds[channel_index] = [(0, 0, 0)] * (self.channels[channel_index][1] - self.channels[channel_index][0])
         self.strip = [(0, 0, 0)] * self.numleds
+
 
         self.debug = True
         self.timefactor = .02
 
-    def fill_solid(self, color, channel = None):
-        if channel is None:
+    def __str__(self):
+        if self.state:
+            disp = "Running"
+        else:
+            disp = "Finished"
+        return "{} -- {}".format(self.programs[self.program_index], disp)
+
+    def get_programs(self):
+        return self.programs
+
+    def fill_solid(self, color, channel_index = None):
+        if channel_index is None:
             length = 512
         else:
+            channel = self.channels[channel_index]
             length =  channel[1] - channel[0]
-        print(channel)
+        print(channel_index)
         middle = [color] * (length)
         if self.debug:
             print("color is {}".format(color))
-        self.put_pixels(middle, channel)
+        self.put_pixels(middle, channel_index)
 
-    def put_pixels(self, pixels, channel = None):
-        if channel is None:
+    def put_pixels(self, pixels, channel_index = None):
+        if channel_index is None:
             start = 0
             numleds = 512
         else:
+            channel = self.channels[channel_index]
             start = channel[0]
             numleds = channel[1]
         stripbeg = self.strip[:start]
@@ -52,6 +79,8 @@ class controller:
         stripend = self.strip[endstart:]
         self.strip = stripbeg + pixels + stripend
         self.client.put_pixels(self.strip)
+        self.leds[channel_index] = pixels
+
     def darkness(self):
         darkness = [(0, 0, 0)] * 512
         self.client.put_pixels(darkness)
@@ -80,7 +109,7 @@ class controller:
             self.client.put_pixels(tree)
             time.sleep(.8)
 
-    def rainbow_chase(self, channel, loops = 2, speed_factor = .2):
+    def X_rainbow_chase(self, channel, loops = 2, speed_factor = .2):
         print(channel)
         channel_length = channel[1] - channel[0]
         interval = 255 / channel_length
@@ -112,7 +141,8 @@ class controller:
         self.put_pixels(bow, channel)
 
 
-    def rainbow_chase(self, channel, loops = 2, speed_factor = .2):
+    def rainbow_chase(self, channel_index, loops = 2, speed_factor = .2):
+        channel = self.channels[channel_index]
         print(channel)
         channel_length = channel[1] - channel[0]
         interval = 255 / channel_length
@@ -137,11 +167,11 @@ class controller:
                 if self.debug:
                     pass
                     # print("Start is {}, left is {}, startlen is {}, endlen is {}, total is {}".format(i, left, len(start), len(end), len(show)))
-                self.put_pixels(show, channel)
+                self.put_pixels(show, channel_index)
                 default_time = 0.1
                 time.sleep(default_time * speed_factor)
 
-        self.put_pixels(bow, channel)
+        self.put_pixels(bow, channel_index)
 
     def rainbow_chase_reverse(self, channel, loops = 2, speed_factor = .2):
         print("Starting rainbow reverse on pixels:  {}".format(channel))
@@ -175,6 +205,15 @@ class controller:
 
         self.put_pixels(bow, channel)
 
+    def walk(self, time_factor = .2):
+        chans = self.channels.keys()
+        for i in chans:
+            currentled = self.leds[1]
+            newled = currentled[1:] + currentled[:1]
+            self.put_pixels(newled, i)
+        time.sleep(time_factor)
+
+
 
 def hsv_to_rgb(h, s, v):
     h = float(h)
@@ -204,7 +243,7 @@ def hsv_to_rgb(h, s, v):
     return r, g, b
 
 def main(argv):
-    cloud = controller()
+    cloud = Controller()
 
     help_string = "controller.py -p program -t timefactor -v"
     try:
@@ -230,22 +269,27 @@ def main(argv):
     time.sleep(1)
     # exit(0)
     # cloud.fill_solid((255, 255, 255), cloud.channels[3])
-    # cloud.rainbow_chase(cloud.channels[2])
+    # cloud.rainbow_chase(2)
     # for i in range(8):
     #     i += 1
     #     cloud.fill_solid((0, 255, 0), cloud.channels[i])
     #     time.sleep(1)
     # rainbow_chase = RainbowChase()
-    for i in range(8):
-        i += 1
-        cloud.fill_solid((0, 255, 0), cloud.channels[i])
-        time.sleep(.2)
-    cloud.random_sparkle((0,255,0), 2, False)
-
     # for i in range(8):
     #     i += 1
-    #     cloud.rainbow_chase(cloud.channels[i])
-    #     time.sleep(.01)
+    #     cloud.fill_solid((0, 255, 0), cloud.channels[i])
+    #     time.sleep(.2)
+    cloud.random_sparkle((0,255,0), 2, False)
+
+    for i in range(8):
+        i += 1
+        cloud.rainbow_chase(i, 2, .01)
+        # time.sleep(.01)
+
+    print('derp')
+    for i in range(600):
+        cloud.walk(.001);
+
     # try:
         # for s in range(1,9):
         #     print(s)
