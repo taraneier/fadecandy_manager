@@ -4,23 +4,21 @@ import opc
 import time
 import sys
 import getopt
+import yaml
 import _thread
 
 
 # TODO: read config from yaml file for channels and address
 class Controller:
     def __init__(self):
-        self.client = opc.Client('munin.local:7890')
-        self.channels = {
-            1: (0, 64),
-            2: (64, 128),
-            3: (128, 192),
-            4: (192, 256),
-            5: (256, 320),
-            6: (320, 384),
-            7: (384, 448),
-            8: (448, 512)
-        }
+        with open("config.yaml", "r") as yamlfile:
+            self.config = yaml.load(yamlfile, Loader=yaml.FullLoader)
+            print("Read successful")
+        print(self.config)
+
+        self.client = opc.Client(self.config['address'])
+        self.channels = self.config['channels']
+
         self.leds = {}
         self.programs = [
             'storm',
