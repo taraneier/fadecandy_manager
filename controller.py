@@ -5,13 +5,13 @@ import time
 import sys
 import getopt
 import yaml
+import sys
 import _thread
 
 
-# TODO: read config from yaml file for channels and address
 class Controller:
     def __init__(self):
-        with open("config.yaml", "r") as yamlfile:
+        with open("./config.yaml", "r") as yamlfile:
             self.config = yaml.load(yamlfile, Loader=yaml.FullLoader)
             print("Read successful")
         print(self.config)
@@ -23,11 +23,14 @@ class Controller:
         self.programs = [
             'storm',
             'rainbow_storm',
-            'cylon',
-            'rainbow_cylon',
+            # 'cylon',
+            # 'rainbow_cylon',
             'rainbow_chase',
             'rainbow_chase_rev',
-            'sunrise'
+            'sunrise',
+            'sunset',
+            'darkness'
+
         ]
         self.program_index = 0
         self.state = False
@@ -39,7 +42,7 @@ class Controller:
         self.strip = [(0, 0, 0)] * self.numleds
 
 
-        self.debug = True
+        self.debug = False
         self.timefactor = .02
 
     def __str__(self):
@@ -49,16 +52,70 @@ class Controller:
             disp = "Finished"
         return "{} -- {}".format(self.programs[self.program_index], disp)
 
+    def set_debug(self, value):
+        self.debug = value
+
+    def set_timefactor(self, value):
+            self.timefactor = value
+
+    def select_program(self, program_name):
+        self.program_index = self.programs.index(program_name)
+
+    def run_program(self):
+        program_name = self.programs[self.program_index]
+        # getattr(sys.modules[__name__], "%s" % program_name)()
+        getattr(self, '%s' % program_name)()
+
     def get_programs(self):
         return self.programs
+
+    def current(self):
+        return self.programs[self.program_index]
+
+    def next(self):
+        self.program_index = self.program_index + 1
+        if self.program_index >= len(self.programs):
+            self.program_index = 0
+        return self.programs[self.program_index]
+
+    def previous(self):
+        self.program_index = self.program_index - 1
+        if self.program_index < 0:
+            self.program_index = len(self.programs) - 1
+        return self.programs[self.program_index]
+
+    def select(self, program):
+        for i, x in enumerate(self.programs):
+            if x == program:
+                self.program_index = i
+
+    def on(self):
+        self.state = True
+        return self.state
+
+    def off(self):
+        self.state = False
+        return self.state
+
+    def run(self):
+        self.on()
+        # update_display()
+        try:
+            func = getattr(self, self.programs[self.program_index])
+            func()
+            time.sleep(2)
+
+        except AttributeError:
+            print("function {} not found".format(self.programs[self.program_index]))
+        self.off()
+        # update_display()
 
     def fill_solid(self, color, channel_index = None):
         if channel_index is None:
             length = 512
         else:
             channel = self.channels[channel_index]
-            length =  channel[1] - channel[0]
-        print(channel_index)
+            length = channel[1] - channel[0]
         middle = [color] * (length)
         if self.debug:
             print("color is {}".format(color))
@@ -80,7 +137,7 @@ class Controller:
         self.leds[channel_index] = pixels
 
     def darkness(self):
-        darkness = [(0, 0, 0)] * 512
+        darkness = [(0, 0, 0)] * self.numleds
         self.client.put_pixels(darkness)
 
     def random_sparkle(self, base_color, density, star = False):
@@ -106,6 +163,54 @@ class Controller:
             # print(tree)
             self.client.put_pixels(tree)
             time.sleep(.8)
+
+    def sunrise(self):
+        transition_time = self.timefactor
+        self.darkness()
+        # fade from black to red
+        for v in range(0, 255):
+            hsv = (0, 1.0, v / 1.0 / 255)
+            rgb = hsv_to_rgb(hsv[0], hsv[1], hsv[2])
+            if self.debug:
+                print("v is {}, hsv is {}, rgb is {} ".format(v, hsv, rgb))
+            self.fill_solid(rgb)
+            time.sleep(transition_time)
+        # fade from red to orange to yellow
+        for h in range(0, 60):
+            hsv = (h, 1.0, 1)
+            rgb = hsv_to_rgb(hsv[0], hsv[1], hsv[2])
+            if self.debug:
+                print("v is {}, hsv is {}, rgb is {} ".format(v, hsv, rgb))
+            self.fill_solid(rgb)
+            time.sleep(transition_time * 4)
+        self.fill_solid((255, 255, 255))
+        time.sleep(transition_time * 42)
+        self.darkness()
+
+
+    def sunset(self):
+        transition_time = self.timefactor
+        self.darkness()
+        self.fill_solid((255, 255, 255))
+        time.sleep(transition_time * 42)
+        # fade from red to orange to yellow
+        v = 255
+        for h in range(60, 0, -1):
+            hsv = (h, 1.0, 1)
+            rgb = hsv_to_rgb(hsv[0], hsv[1], hsv[2])
+            if self.debug:
+                print("v is {}, hsv is {}, rgb is {} ".format(v, hsv, rgb))
+            self.fill_solid(rgb)
+            time.sleep(transition_time * 4)
+        # fade from black to red
+        for v in range(255, 50, -1):
+            hsv = (0, 1.0, v / 1.0 / 255)
+            rgb = hsv_to_rgb(hsv[0], hsv[1], hsv[2])
+            if self.debug:
+                print("v is {}, hsv is {}, rgb is {} ".format(v, hsv, rgb))
+            self.fill_solid(rgb)
+            time.sleep(transition_time)
+        self.darkness()
 
     def X_rainbow_chase(self, channel, loops = 2, speed_factor = .2):
         print(channel)
@@ -211,6 +316,65 @@ class Controller:
             self.put_pixels(newled, i)
         time.sleep(time_factor)
 
+    def rainbow_storm(self):
+        self.storm(True)
+
+    def storm(self, rainbow=False):
+        strikes = random.randint(3, 10)
+        for strikes in range(0, strikes):
+            if rainbow:
+                self.lightning_rainbow()
+            else:
+                self.lightning()
+            self.random_delay(3, 16)
+
+    def lightning(self):
+        self.client.put_pixels(self.black)
+        ledstart = random.randint(0, self.numleds)  # Determine starting location of flash
+        ledlen = random.randint(0,
+                                self.numleds - ledstart)  # // Determine length of flash (not to go beyond NUM_LEDS-1)
+        flashes = random.randint(3, self.flashLimit)
+        for flash_counter in range(0, flashes):
+            print("flashcounter {} of flashes {}".format(flash_counter, flashes))
+            if flash_counter == 0:
+                dimmer = 5  # the brightness of the leader is scaled down by a factor of 5
+            else:
+                dimmer = random.randint(1, 3)  # return strokes are brighter than the leader
+            color = hsv_to_rgb(60, .1, 1 / dimmer)
+            self.fill_solid(ledstart, ledlen, color)
+
+            self.random_delay(3, 16)
+
+            if flash_counter == 0:
+                time.sleep(.150)
+
+            self.random_delay(0, 100, 50)
+
+        self.client.put_pixels(self.black)
+        # self.random_delay(0, self.flashFrequency)
+
+    def lightning_rainbow(self):
+        self.client.put_pixels(self.black)
+        ledstart = random.randint(0, self.numleds)  # Determine starting location of flash
+        ledlen = random.randint(0,
+                                self.numleds - ledstart)  # // Determine length of flash (not to go beyond NUM_LEDS-1)
+        flashes = random.randint(3, self.flashLimit)
+        for flash_counter in range(0, flashes):
+            print("flashcounter {} of flashes {}".format(flash_counter, flashes))
+            if flash_counter == 0:
+                dimmer = 5  # the brightness of the leader is scaled down by a factor of 5
+            else:
+                dimmer = random.randint(1, 3)  # return strokes are brighter than the leader
+
+            color = hsv_to_rgb(random.randint(0, 255), 1, 1 / dimmer)
+            self.fill_solid(ledstart, ledlen, color)
+            self.random_delay(3, 16)
+            if flash_counter == 0:
+                time.sleep(.150)
+            self.random_delay(0, 100, 50)
+
+        self.client.put_pixels(self.black)
+        self.random_delay(0, self.flashFrequency)
 
 
 def hsv_to_rgb(h, s, v):
@@ -253,18 +417,24 @@ def main(argv):
         if opt in ("-v", "--verbose"):
             cloud.set_debug(True)
         elif opt in ("-t", "--timefactor"):
-            if (arg.isnumeric()):
-                cloud.set_timefactor(int(arg))
-            else:
-                print("timefactor should be numeric (ex. 10, 100, 1000)")
+            try:
+                val = int(arg)
+            except ValueError:
+                val = float(arg)
+
+            cloud.set_timefactor(val)
+
+            # else:
+            #     print("timefactor should be numeric (ex. 10, 100, 1000)")
         elif opt in ("-p", "--program"):
-            cloud.select(arg)
-            cloud.run()
-    print("Debug is {}, running with a timefactor of {}.".format(cloud.debug, 1 / cloud.timefactor))
+            cloud.select_program(arg)
+            cloud.run_program()
+    print("Debug is {}, running with a timefactor of {}.".format(cloud.debug, cloud.timefactor))
     print(cloud)
-    cloud.darkness()
-    cloud.fill_solid((255, 255, 255))
-    time.sleep(1)
+    # cloud.darkness()
+    # cloud.sunrise()
+    # cloud.fill_solid((255, 255, 255))
+    # time.sleep(1)
     # exit(0)
     # cloud.fill_solid((255, 255, 255), cloud.channels[3])
     # cloud.rainbow_chase(2)
@@ -277,16 +447,16 @@ def main(argv):
     #     i += 1
     #     cloud.fill_solid((0, 255, 0), cloud.channels[i])
     #     time.sleep(.2)
-    cloud.random_sparkle((0,255,0), 2, False)
+    # cloud.random_sparkle((0,255,0), 2, False)
 
-    for i in range(8):
-        i += 1
-        cloud.rainbow_chase(i, 2, .01)
-        # time.sleep(.01)
-
-    print('derp')
-    for i in range(600):
-        cloud.walk(.001);
+    # for i in range(8):
+    #     i += 1
+    #     cloud.rainbow_chase(i, 2, .01)
+    #     # time.sleep(.01)
+    #
+    # print('derp')
+    # for i in range(600):
+    #     cloud.walk(.001);
 
     # try:
         # for s in range(1,9):

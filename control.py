@@ -2,7 +2,8 @@ import board
 import busio
 from digitalio import DigitalInOut, Direction, Pull
 from PIL import Image, ImageDraw, ImageFont
-import Adafruit_SSD1306
+import adafruit_ssd1306
+
 import os
 import subprocess
 import time
@@ -15,10 +16,10 @@ controller = Controller()
 programs = controller.get_programs()
 program_index = 0
 
-# Create the I2C interface.
-i2c = busio.I2C(board.SCL, board.SDA)
-# Create the SSD1306 OLED class.
-disp = Adafruit_SSD1306.SSD1306_I2C(128, 64, i2c)
+# Very important... This lets py-gaugette 'know' what pins to use in order to reset the display
+RESET_PIN = DigitalInOut(board.D4)
+i2c = board.I2C()
+disp = adafruit_ssd1306.SSD1306_I2C(128, 64, i2c, addr=0x3C, reset=RESET_PIN)
 
 # Input pins:
 button_A = DigitalInOut(board.D5)
@@ -67,10 +68,10 @@ ip = subprocess.check_output("ifconfig wlan0 | grep 'inet ' | awk '{ print $2}'"
 draw = ImageDraw.Draw(image)
 
 # Draw a black filled box to clear the image.
-draw.rectangle((0, 0, width, height), outline=0, fill=0)
+# draw.rectangle((0, 0, width, height), outline=0, fill=0)
 
 # Load default font.
-font = ImageFont.load_default()
+font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
 draw.text((0, 0), "Initializing...", font=font, fill="white")
 draw.text((0, 10), "Hostname: {hostname}".format(**locals()), font=font, fill="white")
 draw.text((0, 20), "IP Addr : {ip}".format(**locals()), font=font, fill="white")
@@ -138,9 +139,11 @@ def main():
             pass
         else:  # button is pressed:
             update_display()
+            controller.run()
             pass
 
         if button_B.value:  # button is released
+            controller.darkness()
             pass
 
         else:  # button is pressed:
